@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model book_copies {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  book_id        String    @db.Uuid
+  mosque_id      String    @db.Uuid
+  barcode        String    @db.VarChar(100)
+  shelf_location String?   @db.VarChar(100)
+  condition      String    @default("good") @db.VarChar(30)
+  status         String    @default("available") @db.VarChar(30)
+  is_archived    Boolean   @default(false)
+  archived_at    DateTime? @db.Timestamptz(6)
+  notes          String?
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @db.Timestamptz(6)
+  sync_version   BigInt    @default(1)
+  books          books     @relation(fields: [book_id], references: [id], onUpdate: NoAction)
+  mosques        mosques   @relation(fields: [mosque_id], references: [id], onUpdate: NoAction)
+  loans          loans[]
+
+  @@unique([id, mosque_id], map: "uq_book_copies_id_mosque")
+  @@unique([mosque_id, barcode], map: "uq_book_copies_mosque_barcode")
+  @@index([barcode], map: "idx_book_copies_barcode")
+  @@index([book_id], map: "idx_book_copies_book_id")
+  @@index([mosque_id], map: "idx_book_copies_mosque_id")
+  @@index([status], map: "idx_book_copies_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model books {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  isbn             String?       @unique @db.VarChar(20)
+  title            String        @db.VarChar(500)
+  author           String        @db.VarChar(300)
+  publisher        String?       @db.VarChar(255)
+  publication_year Int?
+  edition          String?       @db.VarChar(50)
+  category         String?       @db.VarChar(150)
+  dewey_decimal    String?       @db.VarChar(50)
+  language         String        @default("ar") @db.VarChar(50)
+  page_count       Int?
+  description      String?
+  is_archived      Boolean       @default(false)
+  archived_at      DateTime?     @db.Timestamptz(6)
+  archive_reason   String?
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime      @default(now()) @db.Timestamptz(6)
+  sync_version     BigInt        @default(1)
+  book_copies      book_copies[]
+  ebook_files      ebook_files[]
+
+  @@index([author], map: "idx_books_author")
+  @@index([category], map: "idx_books_category")
+  @@index([is_archived], map: "idx_books_is_archived")
+  @@index([title], map: "idx_books_title")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ebook_files {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  book_id         String   @db.Uuid
+  file_name       String   @db.VarChar(255)
+  file_path       String   @db.VarChar(1000)
+  file_format     String   @db.VarChar(20)
+  file_size_bytes BigInt
+  checksum_sha256 String?  @db.VarChar(64)
+  is_public       Boolean  @default(false)
+  uploaded_by     String?  @db.Uuid
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @db.Timestamptz(6)
+  sync_version    BigInt   @default(1)
+  books           books    @relation(fields: [book_id], references: [id], onUpdate: NoAction)
+  users           users?   @relation(fields: [uploaded_by], references: [id], onUpdate: NoAction)
+
+  @@index([book_id], map: "idx_ebook_files_book_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model loans {
+  id                             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  copy_id                        String      @db.Uuid
+  user_id                        String      @db.Uuid
+  mosque_id                      String      @db.Uuid
+  loaned_by                      String      @db.Uuid
+  received_by                    String?     @db.Uuid
+  loan_date                      DateTime    @default(now()) @db.Timestamptz(6)
+  due_date                       DateTime    @db.Timestamptz(6)
+  return_date                    DateTime?   @db.Timestamptz(6)
+  status                         String      @default("active") @db.VarChar(30)
+  notes                          String?
+  created_at                     DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime    @default(now()) @db.Timestamptz(6)
+  sync_version                   BigInt      @default(1)
+  book_copies                    book_copies @relation(fields: [copy_id, mosque_id], references: [id, mosque_id], onUpdate: NoAction, map: "fk_loans_copy_mosque")
+  users_loans_loaned_byTousers   users       @relation("loans_loaned_byTousers", fields: [loaned_by], references: [id], onUpdate: NoAction)
+  mosques                        mosques     @relation(fields: [mosque_id], references: [id], onUpdate: NoAction)
+  users_loans_received_byTousers users?      @relation("loans_received_byTousers", fields: [received_by], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  users_loans_user_idTousers     users       @relation("loans_user_idTousers", fields: [user_id], references: [id], onUpdate: NoAction)
+
+  @@index([copy_id], map: "idx_loans_copy_id")
+  @@index([due_date], map: "idx_loans_due_date")
+  @@index([mosque_id], map: "idx_loans_mosque_id")
+  @@index([status], map: "idx_loans_status")
+  @@index([user_id], map: "idx_loans_user_id")
+}
+
+model mosques {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code         String        @unique @db.VarChar(50)
+  name         String        @db.VarChar(255)
+  city         String        @db.VarChar(100)
+  district     String?       @db.VarChar(100)
+  address      String?
+  phone        String?       @db.VarChar(50)
+  email        String?       @db.VarChar(255)
+  is_active    Boolean       @default(true)
+  created_at   DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime      @default(now()) @db.Timestamptz(6)
+  sync_version BigInt        @default(1)
+  book_copies  book_copies[]
+  loans        loans[]
+  users        users[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model sync_journal {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  node_id       String    @db.VarChar(100)
+  table_name    String    @db.VarChar(100)
+  record_id     String    @db.Uuid
+  operation     String    @db.VarChar(20)
+  payload       Json?
+  occurred_at   DateTime  @default(now()) @db.Timestamptz(6)
+  sync_status   String    @default("pending") @db.VarChar(30)
+  synced_at     DateTime? @db.Timestamptz(6)
+  retry_count   Int       @default(0)
+  error_message String?
+
+  @@index([table_name, record_id], map: "idx_sync_journal_record")
+  @@index([sync_status, occurred_at], map: "idx_sync_journal_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model users {
+  id                             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mosque_id                      String?       @db.Uuid
+  role                           String        @db.VarChar(20)
+  username                       String        @unique @db.VarChar(100)
+  full_name                      String        @db.VarChar(255)
+  email                          String?       @unique @db.VarChar(255)
+  phone                          String?       @db.VarChar(50)
+  password_hash                  String        @db.VarChar(255)
+  membership_number              String?       @unique @db.VarChar(100)
+  is_active                      Boolean       @default(true)
+  created_at                     DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime      @default(now()) @db.Timestamptz(6)
+  sync_version                   BigInt        @default(1)
+  ebook_files                    ebook_files[]
+  loans_loans_loaned_byTousers   loans[]       @relation("loans_loaned_byTousers")
+  loans_loans_received_byTousers loans[]       @relation("loans_received_byTousers")
+  loans_loans_user_idTousers     loans[]       @relation("loans_user_idTousers")
+  mosques                        mosques?      @relation(fields: [mosque_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([mosque_id], map: "idx_users_mosque_id")
+  @@index([role], map: "idx_users_role")
+}
